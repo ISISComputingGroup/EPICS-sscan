@@ -12,7 +12,7 @@ of this distribution.
 #ifndef INCrecDynLinkh
 #define INCrecDynLinkh
 
-#include <tsDefs.h>
+/* tmm not in 3.15.0.1 #include <tsDefs.h> */
 typedef struct recDynLink{
 	void	*puserPvt;
 	void	*pdynLinkPvt;
@@ -54,5 +54,11 @@ epicsShareFunc long epicsShareAPI recDynLinkGet(recDynLink *precDynLink, void *p
 long epicsShareAPI recDynLinkGetCallback(recDynLink *precDynLink, size_t *nRequest, recDynCallback userGetCallback);
 epicsShareFunc long epicsShareAPI recDynLinkPut(recDynLink *precDynLink,void *pbuffer,size_t nRequest);
 epicsShareFunc long epicsShareAPI recDynLinkPutCallback(recDynLink *precDynLink,void *pbuffer,size_t nRequest, recDynCallback notifyCallback);
+
+/* bitmask */
+#define ACCESS_NONE 0
+#define ACCESS_READ 1
+#define ACCESS_WRITE 2
+int epicsShareAPI recDynLinkCheckReadWriteAccess(recDynLink *precDynLink);
 
 #endif /*INCrecDynLinkh*/

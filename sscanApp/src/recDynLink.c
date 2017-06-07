@@ -40,13 +40,18 @@ of this distribution.
 
 #include <taskwd.h>
 #include <dbDefs.h>
+
+#include <dbAddr.h>
+/* #include <dbAccessDefs.h> */
+epicsShareFunc long epicsShareAPI dbNameToAddr(const char *pname,struct dbAddr *); 
+
 #include <epicsPrint.h>
 #include <db_access.h>
 #include <db_access_routines.h>
 #include <cadef.h>
 #include <caerr.h>
 #include <caeventmask.h>
-#include <tsDefs.h>
+/* not in 3.15.0.1 #include <tsDefs.h> */
 #include <errlog.h>
 #include <epicsExport.h>
 #include <epicsExit.h>
@@ -154,12 +159,27 @@ void exit_handler(void *arg) {
 	shutting_down = 1;
 }
 
+int epicsShareAPI recDynLinkCheckReadWriteAccess(recDynLink *precDynLink) {
+	int retval = ACCESS_NONE;
+	dynLinkPvt	*pdynLinkPvt;
+	chid chid;
+
+	if (precDynLink == NULL) return(retval);
+	pdynLinkPvt = precDynLink->pdynLinkPvt;
+	if (pdynLinkPvt == NULL) return(retval);
+	chid = pdynLinkPvt->chid;
+	if (chid == NULL) {printf("recDynLinkCheckReadWriteAccess: chid is NULL for '%s'\n", pdynLinkPvt->pvname); return(retval);}
+	if (ca_read_access(chid)) retval |= ACCESS_READ;
+	if (ca_write_access(chid)) retval |= ACCESS_WRITE;
+	return(retval);
+}
+
 long epicsShareAPI recDynLinkAddInput(recDynLink *precDynLink,char *pvname,
 	short dbrType,int options,
 	recDynCallback searchCallback,recDynCallback monitorCallback)
 {
-	dynLinkPvt		*pdynLinkPvt;
-	struct dbAddr	dbaddr;
+	dynLinkPvt	*pdynLinkPvt;
+	DBADDR		dbaddr;
 	msgQCmd		cmd;
 
 	if (recDynLinkDebug > 10)
@@ -177,7 +197,7 @@ long epicsShareAPI recDynLinkAddInput(recDynLink *precDynLink,char *pvname,
 		printf("recDynLinkAddInput: pvname is blank\n");
 		return(-1);
 	}
-	if (options&rdlDBONLY  && db_name_to_addr(pvname,&dbaddr)) return(-1);
+	if (options&rdlDBONLY  && dbNameToAddr(pvname,&dbaddr)) return(-1);
 	if (!inpTaskId) recDynLinkStartTasks();
 	if (precDynLink->pdynLinkPvt) {
 		if (recDynLinkDebug > 10)
@@ -211,8 +231,8 @@ long epicsShareAPI recDynLinkAddInput(recDynLink *precDynLink,char *pvname,
 long epicsShareAPI recDynLinkAddOutput(recDynLink *precDynLink,char *pvname,
 	short dbrType, int options, recDynCallback searchCallback)
 {
-	dynLinkPvt		*pdynLinkPvt;
-	struct dbAddr	dbaddr;
+	dynLinkPvt	*pdynLinkPvt;
+	DBADDR		dbaddr;
 	msgQCmd		cmd;
     
 	if (recDynLinkDebug > 10) 
@@ -230,7 +250,7 @@ long epicsShareAPI recDynLinkAddOutput(recDynLink *precDynLink,char *pvname,
 		printf("recDynLinkAddOutput: pvname is empty\n");
 		return(-1);
 	}
-	if (options&rdlDBONLY  && db_name_to_addr(pvname,&dbaddr)) return(-1);
+	if (options&rdlDBONLY  && dbNameToAddr(pvname,&dbaddr)) return(-1);
 	if (!outTaskId) recDynLinkStartTasks();
 	if (precDynLink->pdynLinkPvt) {
 		if (recDynLinkDebug > 10) 

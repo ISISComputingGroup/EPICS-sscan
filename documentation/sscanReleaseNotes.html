@@ -10,6 +10,93 @@ content="text/html; charset=iso-8859-1">
 
 <h1 align="center">sscan Release Notes</h1>
 
+<h2 align="center">Release 2-10 - Oct 22, 2014</h2>
+<ul>
+
+<li>Changed DBD_INSTALLS to DBD for sscanSupport and sscanProgressSupport
+
+<li>Previously, a scan driven by a scanparm record from a different ioc was
+occasionally failing to get the new positioner's current value before starting
+the scan.  
+
+<li>sscanRecord: More thorough mutex lock around PV-status checks and updates,
+including essentially all of lookupPV() and the "psscan->faze ==
+sscanFAZE_SCAN_PENDING" sections of posMonCallback() and pvSearchCallback(). 
+Initialize p_pp when positioner PV changes, so we can detect a value that hasn't
+been updated from the new PV.  More thorough PV-status check in checkConnections
+(also check dbAddrNv or recDynLinkConnectionStatus()).  checkConnections() was
+failing to check the recDynLinkConnectionStatus of the positioner-output link.
+
+<li>For positioner-input links, check waitingForPosMon along with connectInProgress.
+Wait until links disconnect before calling lookupPV.
+Previously, was setting badOutPutPv before changing positioner-input links, and badInputPv before changing positioner-output links.
+No longer init p_cv to -HUGE_VAL (replaced by waitingForPosMon)
+
+<li>When changing positioner links, and waiting for the first monitor callback
+after the change (to get current position for, e.g., relative scan about that
+position), do a recDynLinkGetCallback from posMonCallback() to defend against
+old monitors from the previous positioner PV.
+
+<li>scanAux.db: Make record name $(P)$(S), add macro for MPTS
+
+<li>sscanRecord.c: check access-security permissions for links<br>
+scan*.adl: show write links that are read-only because of access security
+
+<li>recDynLink.c: added recDynLinkCheckReadWriteAccess() to check
+access-security permissions.
+
+<li>scan_full.adl: TnNV were implemented wrong: showed red with no PV name.
+
+<li>sscanRecord.c had "#include epicsExport.h" in the wrong place, and this
+broke cygwin builds.
+
+<li>Modified scanParms_settings.req so it uses the same macro as scanParms.db (M
+instead of Q). Added scanAux_settings.req, alignParms_settings.req,
+scanParms2D_settings.req, scanParmsRemote_settings.re.
+
+<li>saveData was failing to read its .req file correctly in some cases on
+Windows. Fixed by opening the file with fopen(file, "rb"), instead of as
+fopen(file, "r").
+
+</ul>
+
+<h2 align="center">Release 2-9 - Apr. 17, 2013</h2>
+<ul>
+
+<li> Added Jon Tischler's scanProgress support.  To use, include
+scanProgressSupport.dbd, link with libscanProgress, load scanProgress.db, start
+the scanProgress seq program, and view with scanProgress.adl.  (The support is
+packaged separately from the rest of the sscan module, and built only if SNCSEQ
+is defined (typically, in configure/RELEASE), to avoid requiring existing users
+of the sscan module to build and run the sequencer.)
+
+<li> Deleted the PV $(P)saveData_config from saveData.db and scan_saveData.adl.
+The PV was never used.
+
+<li>Included new version of mdautils-src.tar
+
+<li>New versions of op/python/* (from utils/mdaPythonUtils).
+
+<li>Added CSS-BOY and caQtDM display files.
+
+<li>on vxWorks, use open(), rather than creat(), to check that we can open a new
+file.
+
+
+</ul>
+
+<h2 align="center">Release 2-8-1 - Sept. 1, 2012</h2>
+<ul>
+
+<li>Fixed minor problems in writeXDR.h and writeXDR.c that prevented it from compiling
+on Windows with Visual Studio compiler.</li>
+
+<li>Previously, saveData crashed with versions of vxWorks that have a
+10-function xdr_ops table.  Now xdr_stdio.c checks for 8-, 10-, and
+12-function tables.
+
+</ul>
+
 <h2 align="center">Release 2-8 - Feb 8, 2012</h2>
 <ul>
 
