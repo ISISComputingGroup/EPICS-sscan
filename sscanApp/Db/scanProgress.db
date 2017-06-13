@@ -72,7 +72,7 @@ grecord(stringout,"$(P)totalActiveTimeStr")
 grecord(longout,"$(P)remainingSec")
 {
 	field(DESC,"remaining time in scan")
-	field(EGU,"sec")
+	field(EGU,"s")
 	field(VAL,"0")
 }
 grecord(longout,"$(P)Npauses")
@@ -83,7 +83,7 @@ grecord(longout,"$(P)Npauses")
 grecord(longout,"$(P)pauseSec")
 {
 	field(DESC,"time spent paused")
-	field(EGU,"sec")
+	field(EGU,"s")
 	field(VAL,"0")
 }
 grecord(longout,"$(P)Ntotal")
