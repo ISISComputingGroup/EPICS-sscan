@@ -740,7 +740,7 @@ LOCAL int checkRWpermission(char* path) {
 		return ERROR;
 	}
 
-	file= creat(tmpfile, O_RDWR);
+	file= creat(tmpfile, 0600);  /* On Win32 only 0600 is supported which is _S_IWRITE | _S_IREAD - of other unix */
 
 	if (fileStatus(tmpfile)!=OK) {
 		return ERROR;
@@ -3521,8 +3521,11 @@ LOCAL void remount_file_system(char* filesystem)
 #endif
 
 	if (file_system_state == FS_MOUNTED) {
-		strcpy(server_pathname, filesystem);
-		strcat(server_pathname, "/");
+		if (filesystem[0] != '\0')
+		{
+			strcpy(server_pathname, filesystem);
+			strcat(server_pathname, "/");
+		}
 		server_subdir= &server_pathname[strlen(server_pathname)];  
 
 		if (checkRWpermission(path)!=OK) {

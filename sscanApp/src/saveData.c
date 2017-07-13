@@ -742,7 +742,7 @@ LOCAL int checkRWpermission(char* path) {
 #ifdef vxWorks
 	file = open (tmpfile, O_CREAT | O_RDWR, 0666);
 #else
-	file= creat(tmpfile, O_RDWR);
+	file= creat(tmpfile, 0600); /* On Win32 only 0600 is supported which is _S_IWRITE | _S_IREAD - of other unix */
 #endif
 
 	if (fileStatus(tmpfile)!=OK) {
