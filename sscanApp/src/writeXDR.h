@@ -6,6 +6,8 @@
 typedef int (*xdrproc_t)();
 typedef void* caddr_t;
 typedef unsigned u_int;
+#else
+#include <rpc/xdr.h>
 #endif /* _WIN32 */
 
 
