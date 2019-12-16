@@ -1,5 +1,27 @@
 # optional extra local definitions here
 -include $(TOP)/configure/RELEASE.private
 
+TEMPLATE_TOP=$(EPICS_BASE)/templates/makeBaseApp/top
+
+SUPPORT=/home/oxygen/MOONEY/epics/synAppsSVN/support
+-include $(TOP)/../configure/SUPPORT.$(EPICS_HOST_ARCH)
+
+#If using the sequencer, point SNCSEQ at its top directory:
+SNCSEQ=$(SUPPORT)/seq/master
+
+# EPICS_BASE usually appears last so other apps can override stuff:
+EPICS_BASE=/APSshare/epics/base-3.14.12.3
+-include $(TOP)/../configure/EPICS_BASE.$(EPICS_HOST_ARCH)
+
+#Capfast users may need the following definitions
+#CAPFAST_TEMPLATES=
+#SCH2EDIF_PATH=
+
+# These lines allow developers to override these RELEASE settings
+# without having to modify this file directly.
+-include $(TOP)/../RELEASE.local
+-include $(TOP)/../RELEASE.$(EPICS_HOST_ARCH).local
+-include $(TOP)/configure/RELEASE.local
+
 include $(TOP)/../../../ISIS_CONFIG
 -include $(TOP)/../../../ISIS_CONFIG.$(EPICS_HOST_ARCH)
