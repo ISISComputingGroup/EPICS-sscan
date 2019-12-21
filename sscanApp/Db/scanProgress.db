@@ -90,13 +90,13 @@ grecord(longout,"$(P)pauseSec")
 grecord(longout,"$(P)hangWaitSec")
 {
 	field(DESC,"wait time before declaring a hang")
-	field(EGU,"sec")
+	field(EGU,"s")
 	field(VAL,"600")
 }
 grecord(longout,"$(P)hungSec")
 {
 	field(DESC,"time spent hung")
-	field(EGU,"sec")
+	field(EGU,"s")
 	field(VAL,"0")
 }
 grecord(stringout,"$(P)hungTimeStr")
