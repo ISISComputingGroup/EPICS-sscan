@@ -1,10 +1,14 @@
+*~
 O.*/
+*.swp
+*BAK.adl
 /db
 /bin
 /dbd
 /include
 /lib
 /templates
+/html
 envPaths
 cdCommands
 dllPath.bat
@@ -12,3 +16,6 @@ runIOC.bat
 runIOC.sh
 relPaths.sh
 .project
+auto_settings.sav*
+auto_positions.sav*
+RELEASE.local
