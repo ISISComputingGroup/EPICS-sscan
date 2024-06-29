@@ -9,6 +9,7 @@ USR_CPPFLAGS += -DUSE_TYPED_RSET
 
 # Cygwin rpc is in tirpc
 USR_INCLUDES_cygwin32 += -I/usr/include/tirpc
+USR_INCLUDES_Linux += -I/usr/include/tirpc
 
 #PROD_HOST += caExample
 #caExample_SRCS	+= caExample.c
