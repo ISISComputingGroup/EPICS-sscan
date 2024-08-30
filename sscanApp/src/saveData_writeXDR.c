@@ -176,11 +176,13 @@
 #ifdef vxWorks
 	#include <usrLib.h>
 	#include <ioLib.h>
-
+	/*#include "nfs/nfsCommon.h"*/
+	
 	/* nfsDrv.h was renamed nfsDriver.h in Tornado 2.2.2 */
 	/* #include	<nfsDrv.h> */
 	extern STATUS nfsMount(char *host, char *fileSystem, char *localName);
 	extern STATUS nfsUnmount(char *localName);
+	extern UINT32 nfs3CacheOptions;
 
 #else
 	#include <sys/stat.h>
@@ -720,6 +722,17 @@ LOCAL int fileStatus(char* fname)
 	int retVal;
 
 	errno = 0;
+	
+	int len;
+	char lastChar;
+
+	len = strlen(fname);
+	lastChar = fname[len-1];
+	if ((lastChar == '/') || (lastChar == '\\')) 
+	{
+		fname[len-1] = 0;
+	}
+	
 	retVal = stat(fname, &status);
 	if ((retVal == -1) && (debug_saveData)) {
 		printf("saveData: stat returned -1 for filename '%s'; errno=%d\n", fname, errno);
@@ -2238,6 +2251,7 @@ LOCAL void getExtraPV()
 			channel, extraValCallback, (void*)pcur);
 		pcur= pcur->nxt;
 	}
+	ca_flush_io();
 }
 
 /*
@@ -2247,7 +2261,6 @@ LOCAL void getExtraPV()
 LOCAL int saveExtraPV(FILE *fd)
 {
 	PV_NODE* pcur;
-	chid     channel;
 	int      type;
 	DBR_VAL* pval;
 	long     count;
@@ -2263,7 +2276,6 @@ LOCAL int saveExtraPV(FILE *fd)
 		while (pcur) {
 			epicsMutexLock(pcur->lock);
 
-			channel= pcur->channel;
 			pval= pcur->pval;
 			
 			cptr= pcur->name;
@@ -3534,6 +3546,8 @@ LOCAL void remount_file_system(char* filesystem)
 #ifdef vxWorks
 	char  hostname[40];
 	char *cout;
+	int  i;
+	UINT32 savedCacheOptions;
 #endif
 
 #ifdef vxWorks
@@ -3557,13 +3571,18 @@ LOCAL void remount_file_system(char* filesystem)
 		strncpy(msg, "Invalid file system !!!", MAX_STRING_SIZE);
 	} else {
 		/* extract the host name */
-		cout= hostname;
 		int i = 0;
+		cout= hostname;
 		while ((*filesystem!='\0') && (*filesystem!='/') && i<40) {
 			*(cout++)= *(filesystem++);
 			i++;
 		}
 		*cout='\0';
+		
+		/* Enable write-through cache */
+		savedCacheOptions = nfs3CacheOptions;
+		/*nfs3CacheOptions = NFS_CACHE_WRITE_THROUGH;*/
+		nfs3CacheOptions = 1;
 		
 		/* Mount the new file system */
 		if (nfsMount(hostname, filesystem, "/data")==ERROR) {
@@ -3572,6 +3591,9 @@ LOCAL void remount_file_system(char* filesystem)
 			file_system_state= FS_MOUNTED;
 			path = local_pathname;
 		}
+		
+		/* Restore saved cache options */
+		nfs3CacheOptions = savedCacheOptions;
 	}
 
 #else
