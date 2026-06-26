@@ -167,10 +167,8 @@
 	#include <direct.h>
 	#include <io.h>
 	typedef unsigned int    u_int;
-#endif
 
-#if defined(__MINGW32__) || defined(__MINGW64__)
-	#define mkdir(PATH, PERMIS) (mkdir(PATH))
+	#define mkdir(PATH, PERMIS) (_mkdir(PATH))
 #endif
     
 #ifdef vxWorks
@@ -208,7 +206,6 @@
 #include <dbDefs.h>         /* for PVNAME_STRINGSZ */
 #include <epicsTypes.h>     /* for MAX_STRING_SIZE */
 #include <epicsStdio.h>		/* for epicsSnprintf() */
-#include <shareLib.h>       /* for READONLY */
 
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #define MIN(a,b) ((a)<(b)?(a):(b))
@@ -216,7 +213,7 @@
 #define DESC_SIZE 30
 #define EGU_SIZE 16
 #define PREFIX_SIZE PVNAME_STRINGSZ/2
-#define BASENAME_SIZE 20
+#define COMPONENT_STRING_SIZE 256
 
 #include "req_file.h"
 #include "writeXDR.h"
@@ -355,7 +352,7 @@ LOCAL const char  save_data_version[]=SAVE_DATA_VERSION;
 #define HANDSHAKE_BUSY 1
 #define HANDSHAKE_DONE 0
 
-#define FNAMELEN 100
+#define FNAMELEN 512
 typedef struct scan {
 	/*========================= PRIVATE FIELDS ===========================*/
 	short        state;       /* state of the structure                   */
@@ -463,7 +460,7 @@ typedef struct scan {
 /*---------------------- saveDataTask's message queue ------------------*/
 
 #define MAX_MSG    1000 /* max # of messages in saveDataTask's queue    */
-#define MAX_SIZE   80   /* max size in byte of the messages             */
+#define MAX_SIZE   512  /* max size in byte of the messages             */
 
 #define MSG_SCAN_DATA  1  /* save scan                                  */
 #define MSG_SCAN_NPTS  2  /* NPTS changed                               */
@@ -574,7 +571,7 @@ typedef struct string_msg {
 	int  type;
 	epicsTimeStamp time;
 	char* pdest;   /* specified as user arg in ca_create_subscription() call */
-	char  string[MAX_STRING_SIZE];
+	char  string[COMPONENT_STRING_SIZE];
 } STRING_MSG;
 
 #define STRING_SIZE (sizeof(STRING_MSG)<MAX_SIZE? \
@@ -582,7 +579,8 @@ typedef struct string_msg {
 
 #define sendStringMsgWait(t,d,s) { \
 	STRING_MSG msg; \
-	msg.type=t; msg.pdest=(char*)d; strncpy(msg.string, s, MAX_STRING_SIZE); \
+	msg.type=t; msg.pdest=(char*)d; strncpy(msg.string, s, COMPONENT_STRING_SIZE - 1); \
+	msg.string[COMPONENT_STRING_SIZE - 1] = '\0'; \
 	epicsTimeGetCurrent(&(msg.time)); \
 	epicsMessageQueueSend(msg_queue, (void *)&msg, \
 	STRING_SIZE); }
@@ -630,9 +628,9 @@ typedef struct pv_node {
 LOCAL char  req_file[40];
 LOCAL char  req_macros[40];
 
-LOCAL char  server_pathname[200];
+LOCAL char  server_pathname[COMPONENT_STRING_SIZE];
 LOCAL char* server_subdir;
-LOCAL char  local_pathname[200];
+LOCAL char  local_pathname[COMPONENT_STRING_SIZE];
 LOCAL char* local_subdir;
 
 #define STATUS_INACTIVE         0
@@ -664,7 +662,7 @@ LOCAL chid  realTime1D_chid;
 LOCAL long  counter;  /* data file counter*/
 LOCAL chid  counter_chid;
 LOCAL char  ioc_prefix[PREFIX_SIZE];
-LOCAL char  scanFile_basename[BASENAME_SIZE] = "";
+LOCAL char  scanFile_basename[COMPONENT_STRING_SIZE] = "";
 
 /* file-write retries */
 LOCAL chid  maxAllowedRetries_chid;
@@ -720,23 +718,32 @@ LOCAL int fileStatus(char* fname)
 {
 	struct stat status;
 	int retVal;
-
+	
 	errno = 0;
 	
 	int len;
 	char lastChar;
-
+	char *fnameLocal;
+	
 	len = strlen(fname);
-	lastChar = fname[len-1];
+	
+	/* Use a local copy of the filename */
+	fnameLocal = (char *)calloc(len+1, sizeof(char));
+	strcpy(fnameLocal, fname);
+	
+	lastChar = fnameLocal[len-1];
 	if ((lastChar == '/') || (lastChar == '\\')) 
 	{
-		fname[len-1] = 0;
+		fnameLocal[len-1] = 0;
 	}
 	
-	retVal = stat(fname, &status);
+	retVal = stat(fnameLocal, &status);
 	if ((retVal == -1) && (debug_saveData)) {
-		printf("saveData: stat returned -1 for filename '%s'; errno=%d\n", fname, errno);
+		printf("saveData: stat returned -1 for filename '%s'; errno=%d\n", fnameLocal, errno);
 	}
+	
+	free(fnameLocal);
+	
 	return retVal;
 }
 
@@ -750,9 +757,10 @@ LOCAL int checkRWpermission(char* path) {
 	/* Quick and dirty way to check for R/W permission */
 	int  file;
 	char tmpfile[100];
-
-	strncpy(tmpfile, path, 100);
-	strncat(tmpfile, "/rix_", 100-strlen(tmpfile));
+	
+	strncpy(tmpfile, path, sizeof(tmpfile) - 1);
+	tmpfile[sizeof(tmpfile) - 1] = '\0';
+	strncat(tmpfile, "/rix_", sizeof(tmpfile) - 1 - strlen(tmpfile));
 
 	while (fileStatus(tmpfile)==OK && strlen(tmpfile)<100) {
 		strncat(tmpfile, "_", 100-strlen(tmpfile));
@@ -809,8 +817,9 @@ void saveData_Init(char* fname, char* macros)
 			epicsThreadSuspendSelf();
 		}
 	}
-    else
+    else {
         printf("saveData already initialized\n");
+	}
     
 	return;
 }
@@ -908,8 +917,7 @@ LOCAL int connectScan(char* name, char* handShake, char* autoHandShake)
 
 	pscan->first_scan= TRUE;
 	pscan->scan_dim= 1;
-	strncpy(pscan->name, name, PVNAME_STRINGSZ-1);
-	pscan->name[PVNAME_STRINGSZ-1]='\0';
+	epicsSnprintf(pscan->name, PVNAME_STRINGSZ, "%s", name);
 	pscan->nxt= NULL;
 	epicsTimeGetCurrent(&(pscan->cpt_time));
 	pscan->cpt_monitored= FALSE;
@@ -1664,17 +1672,17 @@ LOCAL void descMonitor(struct event_handler_args eha)
 
 LOCAL void fileSystemMonitor(struct event_handler_args eha)
 {
-	sendStringMsgWait(MSG_FILE_SYSTEM, NULL, eha.dbr);
+	sendStringMsgWait(MSG_FILE_SYSTEM, NULL, (const char*) eha.dbr);
 }
 
 LOCAL void fileSubdirMonitor(struct event_handler_args eha)
 {
-	sendStringMsgWait(MSG_FILE_SUBDIR, NULL, eha.dbr);
+	sendStringMsgWait(MSG_FILE_SUBDIR, NULL, (const char*) eha.dbr);
 }
 
 LOCAL void fileBasenameMonitor(struct event_handler_args eha)
-{
-	sendStringMsgWait(MSG_FILE_BASENAME, NULL, eha.dbr);
+{	
+	sendStringMsgWait(MSG_FILE_BASENAME, NULL, (const char*) eha.dbr);
 }
 
 LOCAL void realTime1DMonitor(struct event_handler_args eha)
@@ -1702,14 +1710,16 @@ LOCAL int connectFileSystem(char* fs)
 
 	epicsSnprintf(fs_disp, 80, "%s.DISP", fs);
 
-	ca_search(fs, &file_system_chid);
-	ca_search(fs_disp, &file_system_disp_chid);
+	ca_create_channel(fs, NULL, NULL, 0, &file_system_chid);
+	//ca_search(fs_disp, &file_system_disp_chid);
 	if (ca_pend_io(0.5)!=ECA_NORMAL) {
 		printf("saveData: Unable to connect %s\nsaveDataTask not initialized\n", fs);
 		return -1;
 	} else {
-		if (ca_add_event(DBR_STRING, file_system_chid, 
-				fileSystemMonitor, NULL, NULL)!=ECA_NORMAL) {
+		evid id;
+	
+		if (ca_create_subscription(DBR_CHAR, COMPONENT_STRING_SIZE, file_system_chid, DBE_VALUE,
+				fileSystemMonitor, NULL, &id)!=ECA_NORMAL) {
 			printf("saveData: Can't monitor %s\nsaveDataTask not initialized\n", fs);
 			ca_clear_channel(file_system_chid);
 			return -1;
@@ -1723,14 +1733,17 @@ LOCAL int connectSubdir(char* sd)
 	char sd_disp[80];
 
 	epicsSnprintf(sd_disp, 80, "%s.DISP", sd);
-	ca_search(sd, &file_subdir_chid);
-	ca_search(sd_disp, &file_subdir_disp_chid);
+	
+	ca_create_channel(sd, NULL, NULL, 0, &file_subdir_chid);
+	//ca_search(sd_disp, &file_subdir_disp_chid);
 	if (ca_pend_io(0.5)!=ECA_NORMAL) {
 		printf("saveData: Unable to connect %s\nsaveDataTask not initialized\n", sd);
 		return -1;
 	} else {
-		if (ca_add_event(DBR_STRING, file_subdir_chid, 
-				fileSubdirMonitor, NULL, NULL)!=ECA_NORMAL) {
+		evid id;
+	
+		if (ca_create_subscription(DBR_CHAR, COMPONENT_STRING_SIZE, file_subdir_chid, DBE_VALUE,
+				fileSubdirMonitor, NULL, &id)!=ECA_NORMAL) {
 			printf("saveData: Can't monitor %s\nsaveDataTask not initialized\n", sd);
 			ca_clear_channel(file_subdir_chid);
 			return -1;
@@ -1744,15 +1757,17 @@ LOCAL int connectBasename(char* bn)
 	char bn_disp[80];
 
 	epicsSnprintf(bn_disp, 80, "%s.DISP", bn);
-	ca_search(bn, &file_basename_chid);
-	ca_search(bn_disp, &file_basename_disp_chid);
+	ca_create_channel(bn, NULL, NULL, 0, &file_basename_chid);
+	//ca_search(bn_disp, &file_basename_disp_chid);
 	if (ca_pend_io(0.5)!=ECA_NORMAL) {
 		printf("saveData: Unable to connect %s\n", bn);
 		file_basename_chid = NULL;
 		return 0;
 	} else {
-		if (ca_add_event(DBR_STRING, file_basename_chid, 
-				fileBasenameMonitor, NULL, NULL)!=ECA_NORMAL) {
+		evid id;
+	
+		if (ca_create_subscription(DBR_CHAR, COMPONENT_STRING_SIZE, file_basename_chid, DBE_VALUE,
+				fileBasenameMonitor, NULL, &id)!=ECA_NORMAL) {
 			printf("saveData: Can't monitor %s\n", bn);
 			ca_clear_channel(file_basename_chid);
 			file_basename_disp_chid = NULL;
@@ -1807,24 +1822,29 @@ LOCAL int connectRetryPVs(char *prefix)
 {
 	char pvName[PVNAME_STRINGSZ];
 
-	strncpy(pvName, prefix, PVNAME_STRINGSZ);
-	strncat(pvName, "saveData_currRetries", PVNAME_STRINGSZ-strlen(pvName));
+	strncpy(pvName, prefix, PVNAME_STRINGSZ - 1);
+	pvName[PVNAME_STRINGSZ - 1] = '\0';
+	strncat(pvName, "saveData_currRetries", PVNAME_STRINGSZ - 1 - strlen(pvName));
 	ca_search(pvName, &currRetries_chid);
 
-	strncpy(pvName, prefix, PVNAME_STRINGSZ);
-	strncat(pvName, "saveData_maxAllowedRetries", PVNAME_STRINGSZ-strlen(pvName));
+	strncpy(pvName, prefix, PVNAME_STRINGSZ - 1);
+	pvName[PVNAME_STRINGSZ - 1] = '\0';
+	strncat(pvName, "saveData_maxAllowedRetries", PVNAME_STRINGSZ - 1 - strlen(pvName));
 	ca_search(pvName, &maxAllowedRetries_chid);
 
-	strncpy(pvName, prefix, PVNAME_STRINGSZ);
-	strncat(pvName, "saveData_totalRetries", PVNAME_STRINGSZ-strlen(pvName));
+	strncpy(pvName, prefix, PVNAME_STRINGSZ - 1);
+	pvName[PVNAME_STRINGSZ - 1] = '\0';
+	strncat(pvName, "saveData_totalRetries", PVNAME_STRINGSZ - 1 - strlen(pvName));
 	ca_search(pvName, &totalRetries_chid);
 
-	strncpy(pvName, prefix, PVNAME_STRINGSZ);
-	strncat(pvName, "saveData_retryWaitInSecs", PVNAME_STRINGSZ-strlen(pvName));
+	strncpy(pvName, prefix, PVNAME_STRINGSZ - 1);
+	pvName[PVNAME_STRINGSZ - 1] = '\0';
+	strncat(pvName, "saveData_retryWaitInSecs", PVNAME_STRINGSZ - 1 - strlen(pvName));
 	ca_search(pvName, &retryWaitInSecs_chid);
 
-	strncpy(pvName, prefix, PVNAME_STRINGSZ);
-	strncat(pvName, "saveData_abandonedWrites", PVNAME_STRINGSZ-strlen(pvName));
+	strncpy(pvName, prefix, PVNAME_STRINGSZ - 1);
+	pvName[PVNAME_STRINGSZ - 1] = '\0';
+	strncat(pvName, "saveData_abandonedWrites", PVNAME_STRINGSZ - 1 - strlen(pvName));
 	ca_search(pvName, &abandonedWrites_chid);
 
 	if (ca_pend_io(0.5)!=ECA_NORMAL) {
@@ -1850,7 +1870,7 @@ LOCAL void extraValCallback(struct event_handler_args eha)
 	PV_NODE * pnode = eha.usr;
 	long type = eha.type;
 	long count = eha.count;
-	READONLY DBR_VAL * pval = eha.dbr;
+	const DBR_VAL * pval = eha.dbr;
 	char *string;
 
 	size_t size=0;
@@ -1897,11 +1917,12 @@ LOCAL void extraValCallback(struct event_handler_args eha)
 LOCAL void extraDescCallback(struct event_handler_args eha)
 {
 	PV_NODE * pnode = eha.usr;
-	READONLY DBR_VAL * pval = eha.dbr;
+	const DBR_VAL * pval = eha.dbr;
 
 	epicsMutexLock(pnode->lock);
 
-	strncpy(pnode->desc, (char *)pval, MAX_STRING_SIZE);
+	strncpy(pnode->desc, (char *)pval, MAX_STRING_SIZE - 1);
+	pnode->desc[MAX_STRING_SIZE - 1] = '\0';
 	if (pnode->desc_chid) ca_clear_channel(pnode->desc_chid);
 
 	epicsMutexUnlock(pnode->lock);
@@ -2039,7 +2060,7 @@ LOCAL int initSaveDataTask()
 
 	server_pathname[0]= '\0';
 	server_subdir= server_pathname;
-	strncpy(local_pathname, "/data/", 200);
+	strncpy(local_pathname, "/data/", COMPONENT_STRING_SIZE);
 	local_subdir= &local_pathname[strlen(local_pathname)];
 
 	rf= req_open_file(req_file, req_macros);
@@ -2109,6 +2130,7 @@ LOCAL int initSaveDataTask()
 		if (req_readMacId(rf, buff1, PVNAME_STRINGSZ)==0) {
 			printf("saveData: fullPathName pv name not defined\n");
 		} else {
+			strncat(buff1, ".$", PVNAME_STRINGSZ - strlen(buff1) - 1);
 			ca_search(buff1, &full_pathname_chid);
 			ca_pend_io(0.5);
 		}
@@ -2138,6 +2160,9 @@ LOCAL int initSaveDataTask()
 		printf("saveData: fileSystem pv name not defined\n");
 		return -1;
 	}
+	
+	strncat(buff1, ".$", PVNAME_STRINGSZ - strlen(buff1) - 1);
+	
 	if (connectFileSystem(buff1)==-1) {
 		printf("saveData: connectFileSystem(%s) failed \n", buff1);
 		return -1;
@@ -2153,6 +2178,9 @@ LOCAL int initSaveDataTask()
 		printf("saveData: subDir pv name not defined\n");
 		return -1;
 	}
+	
+	strncat(buff1, ".$", PVNAME_STRINGSZ - strlen(buff1) - 1);
+	
 	if (connectSubdir(buff1)==-1) {
 		printf("saveData: connectSubdir(%s) failed \n", buff1);
 		return -1;
@@ -2165,6 +2193,8 @@ LOCAL int initSaveDataTask()
 		if (req_readMacId(rf, buff1, PVNAME_STRINGSZ)==0) {
 			printf("saveData: baseName pv name not defined\n");
 		} else {
+			strncat(buff1, ".$", PVNAME_STRINGSZ - strlen(buff1) - 1);
+		
 			if (connectBasename(buff1)==-1) {
 				printf("saveData: failed to connect to baseName pv\n");
 			}
@@ -2186,10 +2216,12 @@ LOCAL int initSaveDataTask()
 			} else {
 				buff2[0]= '\0';
 			}
-			strncpy(buff2, buff1, PVNAME_STRINGSZ);
-			strncat(buff2, ".AWAIT", PVNAME_STRINGSZ-strlen(buff2));
-			strncpy(buff3, buff1, PVNAME_STRINGSZ);
-			strncat(buff3, ".AAWAIT", PVNAME_STRINGSZ-strlen(buff3));
+			strncpy(buff2, buff1, PVNAME_STRINGSZ - 1);
+			buff2[PVNAME_STRINGSZ - 1] = '\0';
+			strncat(buff2, ".AWAIT", PVNAME_STRINGSZ - 1 - strlen(buff2));
+			strncpy(buff3, buff1, PVNAME_STRINGSZ - 1);
+			buff3[PVNAME_STRINGSZ - 1] = '\0';
+			strncat(buff3, ".AAWAIT", PVNAME_STRINGSZ - 1 - strlen(buff3));
 			Debug2(2,"saveData: call connectScan(%s,%s)\n", buff1, buff2);
 			connectScan(buff1, buff2, buff3);
 		}
@@ -2352,6 +2384,7 @@ LOCAL int writeScanRecInProgress(SCAN *pscan, epicsTimeStamp stamp, int isRetry)
 	/* Attempt to open data file */
 	Debug1(3, "saveData:writeScanRecInProgress: Opening file '%s'\n", pscan->ffname);
 	epicsTimeGetCurrent(&openTime);
+	
 	fd = fopen(pscan->ffname, pscan->first_scan ? "wb+" : "rb+");
 
 	if ((fd==NULL) || (fileStatus(pscan->ffname) == ERROR)) {
@@ -2912,7 +2945,8 @@ LOCAL void proc_scan_data(SCAN_TS_SHORT_MSG* pmsg)
 			}
 			/* Make file name */
 			if (scanFile_basename[0] == '\0') {
-				strncpy(scanFile_basename, ioc_prefix, BASENAME_SIZE);
+				strncpy(scanFile_basename, ioc_prefix, COMPONENT_STRING_SIZE - 1);
+				scanFile_basename[COMPONENT_STRING_SIZE - 1] = '\0';
 			}
 			epicsSnprintf(pscan->fname, FNAMELEN, "%s%.4d.mda", scanFile_basename, (int)pscan->counter);
 #ifdef vxWorks
@@ -2968,8 +3002,8 @@ LOCAL void proc_scan_data(SCAN_TS_SHORT_MSG* pmsg)
 				pscan->name, pscan->scan_dim, pscan->dims_offset);
 			pscan->nxt->regular_offset= pscan->regular_offset;
 #endif
-			strncpy(pscan->nxt->fname, pscan->fname, FNAMELEN);
-			strncpy(pscan->nxt->ffname, pscan->ffname, FNAMELEN);
+			epicsSnprintf(pscan->nxt->fname, sizeof(pscan->nxt->fname), "%s", pscan->fname);
+			epicsSnprintf(pscan->nxt->ffname, sizeof(pscan->nxt->ffname), "%s", pscan->ffname);
 		}
 
 		pscan->savedSeekPos = 0;
@@ -3268,8 +3302,7 @@ LOCAL void proc_scan_pxsm(STRING_MSG* pmsg)
 {
 	epicsTimeStamp now;
 
-	strncpy(pmsg->pdest, pmsg->string, MAX_STRING_SIZE-1);
-	pmsg->pdest[MAX_STRING_SIZE-1]='\0';
+	epicsSnprintf(pmsg->pdest, MAX_STRING_SIZE, "%s", pmsg->string);
 
 	epicsTimeGetCurrent(&now);
 	DebugMsg2(2, "MSG_SCAN_PXSM(%s)= %f\n", pmsg->string, 
@@ -3475,7 +3508,8 @@ LOCAL void proc_scan_txnv(SCAN_INDEX_MSG* pmsg)
 			pscan->txpv[i][0]='\0';
 			pscan->txpvRec[i][0]='\0';
 		} else {
-			strncpy(pscan->txpvRec[i], pscan->txpv[i], PVNAME_STRINGSZ);
+			strncpy(pscan->txpvRec[i], pscan->txpv[i], PVNAME_STRINGSZ - 1);
+			pscan->txpvRec[i][PVNAME_STRINGSZ - 1] = '\0';
 			len= strcspn(pscan->txpvRec[i], ".");
 			pscan->txsc[i]= strncmp(&pscan->txpv[i][len], ".EXSC", 6);
 			pscan->txpvRec[i][len]='\0';
@@ -3511,8 +3545,7 @@ LOCAL void proc_desc(STRING_MSG* pmsg)
 {
 	epicsTimeStamp now;
 
-	strncpy(pmsg->pdest, pmsg->string, MAX_STRING_SIZE-1);
-	pmsg->pdest[MAX_STRING_SIZE-1]= '\0';
+	epicsSnprintf(pmsg->pdest, MAX_STRING_SIZE, "%s", pmsg->string);
 
 	epicsTimeGetCurrent(&now);
 	DebugMsg2(2, "MSG_DESC(%s)= %f\n", pmsg->string, 
@@ -3523,8 +3556,7 @@ LOCAL void proc_egu(STRING_MSG* pmsg)
 {
 	epicsTimeStamp now;
 
-	strncpy(pmsg->pdest, pmsg->string, 15);
-	pmsg->pdest[15]= '\0';
+	epicsSnprintf(pmsg->pdest, 16, "%s", pmsg->string);
 
 	epicsTimeGetCurrent(&now);
 	DebugMsg2(2, "MSG_EGU(%s)= %f\n", pmsg->string, 
@@ -3554,7 +3586,7 @@ LOCAL void remount_file_system(char* filesystem)
 #ifdef vxWorks
 	nfsUnmount("/data");
 #endif
-
+	
 	file_system_state= FS_NOT_MOUNTED;
 	save_status= STATUS_ACTIVE_FS_ERROR;
 
@@ -3574,6 +3606,7 @@ LOCAL void remount_file_system(char* filesystem)
 		/* extract the host name */
 		int i = 0;
 		cout= hostname;
+		
 		while ((*filesystem!='\0') && (*filesystem!='/') && i<40) {
 			*(cout++)= *(filesystem++);
 			i++;
@@ -3605,8 +3638,9 @@ LOCAL void remount_file_system(char* filesystem)
 #endif
 
 	if (file_system_state == FS_MOUNTED) {
-		strncpy(server_pathname, filesystem, 200);
-		strncat(server_pathname, "/", 200-strlen(server_pathname));
+		strncpy(server_pathname, filesystem, COMPONENT_STRING_SIZE - 1);
+		server_pathname[COMPONENT_STRING_SIZE - 1] = '\0';
+		strncat(server_pathname, "/", COMPONENT_STRING_SIZE - 1 - strlen(server_pathname));
 		server_subdir= &server_pathname[strlen(server_pathname)];  
 
 		if (checkRWpermission(path)!=OK) {
@@ -3705,8 +3739,8 @@ LOCAL void proc_file_subdir(STRING_MSG* pmsg)
 
 LOCAL void proc_file_basename(STRING_MSG* pmsg)
 {
-	strncpy(scanFile_basename, pmsg->string, BASENAME_SIZE-1);
-	scanFile_basename[BASENAME_SIZE-1] = '\0';
+	strncpy(scanFile_basename, pmsg->string, COMPONENT_STRING_SIZE-1);
+	scanFile_basename[COMPONENT_STRING_SIZE-1] = '\0';
 	DebugMsg1(2, "MSG_FILE_BASENAME(%s)\n", pmsg->string);
 }
 
