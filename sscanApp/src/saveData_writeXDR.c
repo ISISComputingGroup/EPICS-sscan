@@ -212,7 +212,7 @@
 
 #define DESC_SIZE 30
 #define EGU_SIZE 16
-#define PREFIX_SIZE PVNAME_STRINGSZ/2
+#define PREFIX_SIZE PVNAME_STRINGSZ - 15
 #define COMPONENT_STRING_SIZE 256
 
 #include "req_file.h"

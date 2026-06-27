@@ -18,14 +18,17 @@
 #include <string.h>
 #define FILENAME_LENGTH  160
 
+#define MACRO_NAME_SIZE 21
+#define MACRO_VALUE_SIZE 41
+
 /************************************************************************/
 /* TYPES								*/
 
 /*----------------------------------------------------------------------*/
 /* macro structure							*/
 typedef struct macro {
-  char  name[21];
-  char  value[41];
+  char  name[MACRO_NAME_SIZE];
+  char  value[MACRO_VALUE_SIZE];
   struct macro* nxt;
 } MACRO;
 

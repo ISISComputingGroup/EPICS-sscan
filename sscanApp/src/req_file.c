@@ -33,8 +33,8 @@ LOCAL MACRO* initMacros(char* macro)
   MACRO* head;
   MACRO* cur;
   int    i;
-  char   mc_name[9];
-  char   mc_value[20];
+  char   mc_name[MACRO_NAME_SIZE];
+  char   mc_value[MACRO_VALUE_SIZE];
 
   head= NULL;
 
@@ -46,7 +46,7 @@ LOCAL MACRO* initMacros(char* macro)
     if(END(macro)) return head;
 
     i= 0;
-    while(!END(macro) && (*macro!=' ') && (*macro!='=') && (i<8))
+    while(!END(macro) && (*macro!=' ') && (*macro!='=') && (i< MACRO_NAME_SIZE-1))
       mc_name[i++]= *(macro++);
     if(END(macro)) return head;
     while(!END(macro) && (*macro!='=')) macro++;
@@ -57,7 +57,7 @@ LOCAL MACRO* initMacros(char* macro)
     if(END(macro)) return head;
     
     i= 0;
-    while(!END(macro) && (*macro!=' ')  && (*macro!=',') && (i<19))
+    while(!END(macro) && (*macro!=' ')  && (*macro!=',') && (i< MACRO_VALUE_SIZE-1))
       mc_value[i++]= *(macro++);
     mc_value[i]= '\0';
     
@@ -88,7 +88,7 @@ LOCAL MACRO* searchMacro(REQ_FILE* rf, char* name)
 
 LOCAL MACRO* readMacro(REQ_FILE* rf)
 {
-  char macName[9];
+  char macName[MACRO_NAME_SIZE];
   int i;
   
   req_skipSpace(rf);
@@ -99,7 +99,7 @@ LOCAL MACRO* readMacro(REQ_FILE* rf)
   req_readChar(rf);
 
   i= 0;
-  while(!eos(rf) && (current(rf)!=')') && (i<8)) {
+  while(!eos(rf) && (current(rf)!=')') && (i< MACRO_NAME_SIZE-1)) {
     macName[i++]= current(rf);
     req_readChar(rf);
   }
