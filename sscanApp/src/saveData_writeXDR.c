@@ -718,13 +718,12 @@ LOCAL int fileStatus(char* fname)
 {
 	struct stat status;
 	int retVal;
-	
-	errno = 0;
-	
+		
 	int len;
 	char lastChar;
 	char *fnameLocal;
 	
+	errno = 0;
 	len = strlen(fname);
 	
 	/* Use a local copy of the filename */
